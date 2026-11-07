@@ -1,0 +1,355 @@
+<!doctype html>
+<html lang="cs">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SeriesTracker</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="SeriesTracker hlídá, jaký díl máš na řadě, kdy vyjde další a co sledovat dál. Seriálová knihovna pro iPhone a iPad.">
+<link rel="icon" href="assets/favicon.png">
+<link rel="apple-touch-icon" href="assets/icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Figtree:wght@400;500;600&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Layout: a marquee-style hero over a strip of phone screens, then features,
+   privacy and support on one narrow column. Dark-first like the app itself. */
+:root {
+  --bg: #0f0b15;
+  --surface: #1a1424;
+  --line: #2e2540;
+  --fg: #f3eef8;
+  --muted: #a99fb6;
+  --accent: #b57cf0;
+  --accent-ink: #160b22;
+  --tick: #ff7a45;
+  --bezel: #08070a;
+  --display: "Big Shoulders Display", "Arial Narrow", "Helvetica Neue", sans-serif;
+  --body: "Figtree", -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    --bg: #fbf8fd; --surface: #f2ebf8; --line: #e0d5ea; --fg: #1c1324; --muted: #665a74;
+    --accent: #7427a6; --accent-ink: #ffffff; --tick: #d4511c; color-scheme: light;
+  }
+}
+:root[data-theme="light"] {
+  --bg: #fbf8fd; --surface: #f2ebf8; --line: #e0d5ea; --fg: #1c1324; --muted: #665a74;
+  --accent: #7427a6; --accent-ink: #ffffff; --tick: #d4511c; color-scheme: light;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 400 17px/1.6 var(--body);
+  -webkit-font-smoothing: antialiased;
+}
+a { color: var(--accent); text-underline-offset: 3px; }
+a:focus-visible, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 6px; }
+img { max-width: 100%; display: block; }
+
+/* Language: every text has a cs and an en twin, the wrapper picks one. */
+#page[data-lang="cs"] [lang="en"], #page[data-lang="en"] [lang="cs"] { display: none; }
+
+.wrap {
+  max-width: 1120px;
+  margin: 0 auto;
+  padding-left: max(20px, env(safe-area-inset-left, 0px));
+  padding-right: max(20px, env(safe-area-inset-right, 0px));
+}
+.narrow { max-width: 760px; }
+
+/* Header */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; padding-block: 20px; }
+.brand { display: flex; align-items: center; gap: 10px; font: 700 22px/1 var(--display); letter-spacing: 0.02em; color: var(--fg); text-decoration: none; }
+.brand img { width: 34px; height: 34px; border-radius: 8px; }
+.lang { display: flex; border: 1px solid var(--line); border-radius: 999px; padding: 3px; }
+.lang button {
+  font: 500 13px/1 var(--mono); color: var(--muted); background: none; border: 0;
+  padding: 7px 11px; border-radius: 999px; cursor: pointer;
+}
+.lang button[aria-pressed="true"] { background: var(--surface); color: var(--fg); }
+
+/* Hero */
+.hero { padding-block: 40px 28px; display: grid; gap: 22px; }
+.code {
+  font: 500 14px/1 var(--mono); color: var(--tick); letter-spacing: 0.04em;
+  display: inline-flex; align-items: center; gap: 10px;
+}
+.code::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--tick); }
+h1 {
+  margin: 0; font: 900 clamp(52px, 9vw, 112px)/0.9 var(--display);
+  text-transform: uppercase; letter-spacing: 0.005em; text-wrap: balance; max-width: 13ch;
+}
+h1 em { font-style: normal; color: var(--accent); }
+.lede { margin: 0; max-width: 34em; font-size: clamp(18px, 2vw, 21px); color: var(--muted); }
+.cta { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; margin-top: 6px; }
+.btn {
+  display: inline-flex; align-items: center; gap: 10px; padding: 14px 22px; border-radius: 14px;
+  background: var(--accent); color: var(--accent-ink); font-weight: 600; text-decoration: none;
+}
+.btn svg { width: 20px; height: 20px; }
+.note { color: var(--muted); font-size: 15px; }
+
+/* Film perforation: the strip edge above and below the screens */
+.perf {
+  height: 10px; margin-block: 26px;
+  background: repeating-linear-gradient(90deg, var(--line) 0 16px, transparent 16px 28px);
+  border-radius: 2px;
+}
+
+/* Screens */
+.screens { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 28px; align-items: start; }
+.screens figure { margin: 0; display: grid; gap: 14px; min-width: 0; }
+/* iPhone frame: black bezel, rounded screen and the camera cutout drawn on top,
+   so every screenshot looks the same whatever its own top colour is. */
+.device {
+  position: relative; max-width: 100%;
+  padding: 3.2%; border-radius: 15% / 7%;
+  background: var(--bezel);
+  box-shadow: 0 0 0 1px var(--line), 0 18px 40px -18px rgba(0, 0, 0, 0.55);
+}
+.device::after {
+  content: ""; position: absolute; left: 50%; top: 4.3%; transform: translateX(-50%);
+  width: 29%; height: 3.6%; border-radius: 999px; background: var(--bezel);
+}
+.phone {
+  width: 100%; height: auto; aspect-ratio: 1206 / 2622;
+  border-radius: 12% / 5.6%; background: var(--surface);
+}
+figcaption { font-size: 15px; color: var(--muted); padding-inline: 4px; }
+figcaption b { display: block; color: var(--fg); font-weight: 600; }
+@media (max-width: 760px) {
+  .screens { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px 16px; }
+}
+
+/* Sections */
+section { padding-block: 64px 8px; }
+h2 {
+  margin: 0 0 28px; font: 700 clamp(34px, 5vw, 52px)/1 var(--display);
+  text-transform: uppercase; letter-spacing: 0.01em; text-wrap: balance;
+}
+.features { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 30px 34px; }
+.features div { display: grid; gap: 6px; align-content: start; min-width: 0; }
+.features h3 { margin: 0; font-size: 18px; font-weight: 600; display: flex; align-items: center; gap: 10px; }
+.features h3 svg { width: 20px; height: 20px; color: var(--accent); flex: none; }
+.features p { margin: 0; color: var(--muted); font-size: 16px; }
+@media (max-width: 860px) { .features { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .features { grid-template-columns: minmax(0, 1fr); } }
+
+.privacy { display: grid; gap: 14px; }
+.privacy p { margin: 0; color: var(--muted); max-width: 40em; }
+.pills { display: flex; flex-wrap: wrap; gap: 8px; }
+.pills span { font: 500 13px/1 var(--mono); padding: 9px 12px; border-radius: 999px; background: var(--surface); }
+
+details { border-top: 1px solid var(--line); padding-block: 16px; }
+details:last-of-type { border-bottom: 1px solid var(--line); }
+summary { cursor: pointer; font-weight: 600; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
+summary::-webkit-details-marker { display: none; }
+summary::after { content: "+"; font: 500 18px/1 var(--mono); color: var(--accent); }
+details[open] summary::after { content: "–"; }
+details p { margin: 10px 0 0; color: var(--muted); }
+.contact { margin-top: 24px; color: var(--muted); }
+.contact b { color: var(--fg); font-weight: 600; user-select: all; }
+
+footer { margin-top: 72px; padding-block: 32px 40px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+footer .wrap { display: grid; gap: 16px; }
+.credit { display: flex; align-items: center; gap: 14px; }
+.credit img { width: 46px; flex: none; }
+.credit p, footer p { margin: 0; }
+.links { display: flex; flex-wrap: wrap; gap: 8px 20px; }
+
+@media (prefers-reduced-motion: no-preference) {
+  .screens figure { animation: rise 0.7s cubic-bezier(.2,.7,.2,1) both; }
+  .screens figure:nth-child(2) { animation-delay: 0.08s; }
+  .screens figure:nth-child(3) { animation-delay: 0.16s; }
+  .screens figure:nth-child(4) { animation-delay: 0.24s; }
+  @keyframes rise { from { transform: translateY(18px); } to { transform: none; } }
+}
+</style>
+</head>
+<body>
+
+<div id="page" data-lang="cs">
+  <header class="wrap top">
+    <a class="brand" href="./"><img src="assets/icon.png" alt=""><span class="app-name">SeriesTracker</span></a>
+    <div class="lang" role="group" aria-label="Jazyk / Language">
+      <button type="button" id="lang-cs" data-set-lang="cs" aria-pressed="true">CS</button>
+      <button type="button" id="lang-en" data-set-lang="en" aria-pressed="false">EN</button>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap hero">
+      <span class="code"><span lang="cs">Na řadě: S02E01</span><span lang="en">Up next: S02E01</span></span>
+      <h1>
+        <span lang="cs">Víš, který díl <em>je na řadě.</em></span>
+        <span lang="en">Know which episode <em>comes next.</em></span>
+      </h1>
+      <p class="lede">
+        <span lang="cs"><span class="app-name">SeriesTracker</span> hlídá, kde ve kterém seriálu jsi, kdy vyjde další díl a co sledovat, až dokoukáš. Pro iPhone a iPad.</span>
+        <span lang="en"><span class="app-name">SeriesTracker</span> keeps track of where you are in every show, when the next episode airs and what to watch when you finish. For iPhone and iPad.</span>
+      </p>
+      <div class="cta">
+        <a class="btn" href="mailto:plecityl@gmail.com?subject=TestFlight">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6h16v12H4z"/><path d="m4 7 8 6 8-6"/></svg>
+          <span lang="cs">Chci betu v TestFlightu</span><span lang="en">Request the TestFlight beta</span>
+        </a>
+        <span class="note"><span lang="cs">Brzy v App Store. Vyžaduje iOS 26.</span><span lang="en">Coming soon to the App Store. Requires iOS 26.</span></span>
+      </div>
+    </div>
+
+    <div class="wrap">
+      <div class="perf" aria-hidden="true"></div>
+      <div class="screens">
+        <figure>
+          <div class="device"><img class="phone" src="assets/library.jpg" alt="Knihovna seriálů s plakáty a počtem nezhlédnutých dílů" width="600" height="1305"></div>
+          <figcaption><b><span lang="cs">Knihovna</span><span lang="en">Library</span></b><span lang="cs">Kolik dílů ti chybí a co je nového.</span><span lang="en">How far behind you are and what's new.</span></figcaption>
+        </figure>
+        <figure>
+          <div class="device"><img class="phone" src="assets/upnext.jpg" alt="Seznam dalších dílů rozkoukaných seriálů" width="600" height="1305" loading="lazy"></div>
+          <figcaption><b><span lang="cs">Na řadě</span><span lang="en">Up Next</span></b><span lang="cs">Další díl odškrtneš jedním klepnutím.</span><span lang="en">Check off the next episode with one tap.</span></figcaption>
+        </figure>
+        <figure>
+          <div class="device"><img class="phone" src="assets/calendar.jpg" alt="Kalendář nadcházejících dílů s datem a časem vydání" width="600" height="1305" loading="lazy"></div>
+          <figcaption><b><span lang="cs">Kalendář</span><span lang="en">Calendar</span></b><span lang="cs">Kdy vyjde co, i s časem vydání.</span><span lang="en">What airs when, down to the time.</span></figcaption>
+        </figure>
+        <figure>
+          <div class="device"><img class="phone" src="assets/detail.jpg" alt="Detail seriálu s hodnocením a postupem sledování" width="600" height="1305" loading="lazy"></div>
+          <figcaption><b><span lang="cs">Detail seriálu</span><span lang="en">Show details</span></b><span lang="cs">Řady, díly, hodnocení a herci.</span><span lang="en">Seasons, episodes, ratings and cast.</span></figcaption>
+        </figure>
+      </div>
+      <div class="perf" aria-hidden="true"></div>
+    </div>
+
+    <section class="wrap">
+      <h2><span lang="cs">Co umí</span><span lang="en">What it does</span></h2>
+      <div class="features">
+        <div>
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10h18M8 3v4M16 3v4"/><rect x="3" y="5" width="18" height="16" rx="2"/></svg><span lang="cs">Upozornění na nové díly</span><span lang="en">New episode alerts</span></h3>
+          <p lang="cs">Ozve se, když vyjde díl rozkoukaného seriálu nebo se blíží nová řada.</p>
+          <p lang="en">Get notified when a show you're watching airs a new episode or a season is about to start.</p>
+        </div>
+        <div>
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l2.6 5.6 6 .7-4.5 4.1 1.2 6L12 16.5 6.7 19.4l1.2-6L3.4 9.3l6-.7z"/></svg><span lang="cs">Pro tebe</span><span lang="en">For You</span></h3>
+          <p lang="cs">Tipy na další seriály podle toho, co máš v knihovně.</p>
+          <p lang="en">Suggestions for what to watch next, based on your library.</p>
+        </div>
+        <div>
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="8" rx="2"/><rect x="3" y="13" width="18" height="8" rx="2"/></svg><span lang="cs">Widgety</span><span lang="en">Widgets</span></h3>
+          <p lang="cs">Další díly a premiéry na ploše i na zamčené obrazovce.</p>
+          <p lang="en">Next episodes and premieres on your Home Screen and Lock Screen.</p>
+        </div>
+        <div>
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 12a9 9 0 0 1 15.5-6.2L21 8M21 3v5h-5M21 12a9 9 0 0 1-15.5 6.2L3 16M3 21v-5h5"/></svg><span lang="cs">Trakt a Simkl</span><span lang="en">Trakt and Simkl</span></h3>
+          <p lang="cs">Volitelně synchronizuje zhlédnuté díly a hodnocení s tvým účtem.</p>
+          <p lang="en">Optionally syncs watched episodes and ratings with your account.</p>
+        </div>
+        <div>
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg><span lang="cs">Statistiky a rok v kostce</span><span lang="en">Stats and year in review</span></h3>
+          <p lang="cs">Kolik hodin jsi u seriálů strávil a co tě letos bavilo nejvíc.</p>
+          <p lang="en">How many hours you've spent watching and what you enjoyed most this year.</p>
+        </div>
+        <div>
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span lang="cs">Hledání podle služby</span><span lang="en">Browse by service</span></h3>
+          <p lang="cs">Projdi, co běží na jednotlivých streamovacích službách, a zjisti, kde se seriál dá sledovat.</p>
+          <p lang="en">Browse what's on each streaming service and see where a show is available.</p>
+        </div>
+        <div>
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12M7 10l5 5 5-5M4 21h16"/></svg><span lang="cs">Záloha</span><span lang="en">Backup</span></h3>
+          <p lang="cs">Celou knihovnu vyexportuješ do souboru a kdykoli ji obnovíš.</p>
+          <p lang="en">Export your whole library to a file and restore it any time.</p>
+        </div>
+        <div>
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span lang="cs">Zkratky a Spotlight</span><span lang="en">Shortcuts and Spotlight</span></h3>
+          <p lang="cs">Seriály najdeš ve vyhledávání systému a další díl odškrtneš i přes Siri.</p>
+          <p lang="en">Find your shows in system search and check off episodes with Siri.</p>
+        </div>
+        <div>
+          <h3><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M12 5v14"/><circle cx="12" cy="12" r="9"/></svg><span lang="cs">Česky i anglicky</span><span lang="en">Czech and English</span></h3>
+          <p lang="cs">Názvy a popisy seriálů v jazyce, ve kterém aplikaci používáš.</p>
+          <p lang="en">Show titles and descriptions in the language you use the app in.</p>
+        </div>
+      </div>
+    </section>
+
+    <section class="wrap narrow privacy" id="soukromi">
+      <h2><span lang="cs">Tvoje data zůstávají u tebe</span><span lang="en">Your data stays with you</span></h2>
+      <p lang="cs">Knihovna, zhlédnuté díly a hodnocení se ukládají jen v zařízení. Aplikace nemá vlastní server, účet, reklamy ani analytiku.</p>
+      <p lang="en">Your library, watched episodes and ratings are stored only on your device. The app has no server of its own, no account, no ads and no analytics.</p>
+      <div class="pills">
+        <span lang="cs">bez účtu</span><span lang="en">no account</span>
+        <span lang="cs">bez reklam</span><span lang="en">no ads</span>
+        <span lang="cs">bez sledování</span><span lang="en">no tracking</span>
+      </div>
+      <p><a href="privacy"><span lang="cs">Zásady ochrany soukromí</span><span lang="en">Privacy Policy</span></a></p>
+    </section>
+
+    <section class="wrap narrow" id="podpora">
+      <h2><span lang="cs">Podpora</span><span lang="en">Support</span></h2>
+      <details>
+        <summary><span lang="cs">Potřebuju k aplikaci účet?</span><span lang="en">Do I need an account?</span></summary>
+        <p lang="cs">Ne. Účet na Traktu nebo Simklu je volitelný a hodí se, pokud už tam historii sledování máš nebo ji chceš mít i jinde.</p>
+        <p lang="en">No. A Trakt or Simkl account is optional, useful if you already keep your watch history there or want it elsewhere too.</p>
+      </details>
+      <details>
+        <summary><span lang="cs">Jak se dostanu k betě?</span><span lang="en">How do I join the beta?</span></summary>
+        <p lang="cs">Napiš na e-mail níže a pošlu ti pozvánku do TestFlightu. Stačí mít v iPhonu nebo iPadu iOS 26 a aplikaci TestFlight z App Store.</p>
+        <p lang="en">Email the address below and I'll send you a TestFlight invite. You need iOS 26 on your iPhone or iPad and the TestFlight app from the App Store.</p>
+      </details>
+      <details>
+        <summary><span lang="cs">Jak přenesu knihovnu do jiného zařízení?</span><span lang="en">How do I move my library to another device?</span></summary>
+        <p lang="cs">V Nastavení vyexportuj zálohu a v novém zařízení ji obnov. Pokud používáš Trakt nebo Simkl, stačí se v novém zařízení přihlásit.</p>
+        <p lang="en">Export a backup in Settings and restore it on the new device. If you use Trakt or Simkl, just sign in on the new device.</p>
+      </details>
+      <details>
+        <summary><span lang="cs">Odkud jsou informace o seriálech?</span><span lang="en">Where does the show information come from?</span></summary>
+        <p lang="cs">Seriály, díly a obrázky poskytuje TMDB, hodnocení a počty diváků Trakt a informace o streamovacích službách JustWatch.</p>
+        <p lang="en">Shows, episodes and images come from TMDB, ratings and viewer counts from Trakt, and streaming availability from JustWatch.</p>
+      </details>
+      <p class="contact"><span lang="cs">Něco nefunguje nebo máš nápad? Napiš na</span><span lang="en">Something not working, or have an idea? Write to</span> <b>plecityl@gmail.com</b></p>
+    </section>
+  </main>
+
+  <footer>
+    <div class="wrap">
+      <div class="credit">
+        <img src="assets/tmdb.svg" alt="The Movie Database (TMDB)">
+        <p lang="cs">Tento produkt používá TMDB API, ale není jím schválen ani certifikován. Data o streamovacích službách poskytuje JustWatch, hodnocení Trakt.</p>
+        <p lang="en">This product uses the TMDB API but is not endorsed or certified by TMDB. Streaming data is provided by JustWatch, ratings by Trakt.</p>
+      </div>
+      <div class="links">
+        <a href="privacy"><span lang="cs">Zásady ochrany soukromí</span><span lang="en">Privacy Policy</span></a>
+        <a href="#podpora"><span lang="cs">Podpora</span><span lang="en">Support</span></a>
+        <span>© 2026 Lukáš Plecitý</span>
+      </div>
+    </div>
+  </footer>
+</div>
+
+<script>
+(() => {
+  // The app's name lives here only, so a rename is a one-line change.
+  const APP_NAME = "SeriesTracker";
+  document.querySelectorAll(".app-name").forEach(el => { el.textContent = APP_NAME; });
+  document.title = APP_NAME;
+
+  const page = document.getElementById("page");
+  const setLang = (lang) => {
+    page.dataset.lang = lang;
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-set-lang]").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.setLang === lang)));
+    try { localStorage.setItem("lang", lang); } catch (e) {}
+  };
+  let saved = null;
+  try { saved = localStorage.getItem("lang"); } catch (e) {}
+  setLang(saved || ((navigator.language || "cs").toLowerCase().startsWith("cs") ? "cs" : "en"));
+  document.querySelectorAll("[data-set-lang]").forEach(b => b.addEventListener("click", () => setLang(b.dataset.setLang)));
+})();
+</script>
+</body>
+</html>
